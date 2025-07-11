@@ -8,6 +8,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+LABEL_BONAFIDE = "bonafide"
+LABEL_SPOOF = "spoof"
+
 
 def str_to_bool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -75,7 +78,9 @@ def load_parameters(trg_state, path):
         if name not in trg_state:
             name = name.replace("module.", "")
             name = name.replace("speaker_encoder.", "")
+            
             if name not in trg_state:
+                if name == "speaker_loss.weight": continue
                 print("%s is not in the model."%origname)
                 continue
         if trg_state[name].size() != loaded_state[origname].size():
@@ -133,12 +138,12 @@ def get_spkdic(cm_meta: str) -> Dict:
         filename_key = os.path.basename(filepath)
 
         if spk not in d_spk:
-            d_spk[spk] = {"bonafide": [], "spoof": []}
+            d_spk[spk] = {LABEL_BONAFIDE: [], LABEL_SPOOF: []}
 
-        if ans == "bonafide":
-            d_spk[spk]["bonafide"].append(filename_key)
-        elif ans == "spoof":
-            d_spk[spk]["spoof"].append(filename_key)
+        if ans == LABEL_BONAFIDE:
+            d_spk[spk][LABEL_BONAFIDE].append(filename_key)
+        elif ans == LABEL_SPOOF:
+            d_spk[spk][LABEL_SPOOF].append(filename_key)
 
     return d_spk
 
