@@ -19,7 +19,7 @@ from utils import load_parameters
 # list of dataset partitions
 SET_PARTITION = ["train", "dev", "eval"]
 
-KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/"
+KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/vlsp2025"
 
 # list of countermeasure(CM) protocols
 SET_CM_PROTOCOL = {
