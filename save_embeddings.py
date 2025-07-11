@@ -69,7 +69,7 @@ def save_embeddings(
 
     dataset = VlspDataset(utt_list, Path(base_dir))
     loader = DataLoader(
-        dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
+        dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True, num_workers=4
     )
 
     cm_emb_dic = {}
@@ -89,7 +89,6 @@ def save_embeddings(
                 cm_emb_dic[key] = cm_emb
                 asv_emb_dic[key] = asv_emb
             
-            # Cập nhật thanh tiến trình với số file trong batch vừa xử lý
             pbar.update(len(keys))
     
     output_dir = "embeddings"
