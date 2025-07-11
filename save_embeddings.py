@@ -90,13 +90,13 @@ def save_embeddings(
             # Key bây giờ là tên file, ví dụ '00000.wav'
             cm_emb_dic[key] = cm_emb
             asv_emb_dic[key] = asv_emb
-    print('Done!')
-    os.makedirs("embeddings", exist_ok=True)
-    with open(f"embeddings/cm_embd_{set_name}.pk", "wb") as f:
+    
+    os.makedirs("new_embeddings", exist_ok=True)
+    with open(f"new_embeddings/cm_embd_{set_name}.pk", "wb") as f:
         pk.dump(cm_emb_dic, f)
-    with open(f"embeddings/asv_embd_{set_name}.pk", "wb") as f:
+    with open(f"new_embeddings/asv_embd_{set_name}.pk", "wb") as f:
         pk.dump(asv_emb_dic, f)
-
+    print('Done!')
 
 def save_models(set_name, asv_embd_ext, device):
     if not SET_TRN.get(set_name):
