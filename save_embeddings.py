@@ -90,6 +90,7 @@ def save_embeddings(
             # Key bây giờ là tên file, ví dụ '00000.wav'
             cm_emb_dic[key] = cm_emb
             asv_emb_dic[key] = asv_emb
+            print(key)
 
     os.makedirs("embeddings", exist_ok=True)
     with open(f"embeddings/cm_embd_{set_name}.pk", "wb") as f:
