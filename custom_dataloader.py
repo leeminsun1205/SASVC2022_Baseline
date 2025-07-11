@@ -37,7 +37,7 @@ class VlspDataset(Dataset):
         
         # Lấy tên file để dùng làm key trả về
         key_filename = os.path.basename(relative_path)
-
+        print(f"Đang đọc tệp: {str(full_audio_path)}")
         # Đọc file âm thanh
         X, _ = sf.read(str(full_audio_path))
         
