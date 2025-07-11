@@ -48,37 +48,59 @@ def save_embeddings(
     protocol_path = SET_CM_PROTOCOL[set_name]
     base_dir = SET_DIR[set_name]
 
+    print(f"\n[DEBUG] Bắt đầu xử lý cho set: '{set_name}'")
+    print(f"[DEBUG] Đường dẫn file metadata: {protocol_path}")
+    print(f"[DEBUG] Thư mục gốc của dữ liệu: {base_dir}")
+
     if not os.path.exists(protocol_path):
-        print(f"Metadata file for '{set_name}' not found at {protocol_path}. Skipping.")
+        print(f"[DEBUG] LỖI: Không tìm thấy file metadata tại '{protocol_path}'. Dừng lại.")
         return
 
     meta_lines = open(protocol_path, "r").readlines()
+    print(f"[DEBUG] Đã đọc được {len(meta_lines)} dòng từ file metadata.")
+
     utt_list = []  # Sẽ chứa các đường dẫn tương đối
 
-    for line in meta_lines:
+    for i, line in enumerate(meta_lines):
+        if i < 5: # In ra 5 dòng đầu tiên để kiểm tra
+            print(f"[DEBUG] Dòng {i+1}: {line.strip()}")
+
         parts = line.strip().split(" ")
         if len(parts) != 3:
             continue
         
         filepath = parts[1] # vd: vlsp2025/train/id00271/bonafide/00000.wav
         
-        # Trích xuất đường dẫn tương đối (bỏ phần 'vlsp2025/train/')
         try:
+            # Đây là dòng code quan trọng cần kiểm tra
             relative_path = filepath.split(f"vlsp2025/vlsp2025/{set_name}/", 1)[1]
             utt_list.append(relative_path)
         except IndexError:
+            # Nếu có lỗi ở đây, nó sẽ được in ra
+            if i < 10: # Chỉ in 10 lỗi đầu tiên để tránh spam
+                print(f"[DEBUG] LỖI PARSING tại dòng {i+1}: Không thể trích xuất đường dẫn tương đối từ '{filepath}'")
             continue
-            
+
+    print(f"\n[DEBUG] Đã xử lý xong metadata. Tổng số file được thêm vào utt_list: {len(utt_list)}")
+    if not utt_list:
+        print("[DEBUG] KẾT LUẬN: utt_list rỗng! Đây là nguyên nhân gây ra lỗi '0it'. Vui lòng kiểm tra lại logic split đường dẫn bên trên.")
+        return
+
     dataset = VlspDataset(utt_list, Path(base_dir))
+    print(f"[DEBUG] Đã tạo VlspDataset với {len(dataset)} mẫu.")
+
     loader = DataLoader(
         dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
     )
+    print(f"[DEBUG] Đã tạo DataLoader với số batch là {len(loader)}.")
+
 
     cm_emb_dic = {}
     asv_emb_dic = {}
 
-    print(f"Getting embeddings from set {set_name}...")
+    print(f"\nGetting embeddings from set {set_name}...")
 
+    # Vòng lặp tqdm sẽ cho bạn biết chính xác có bao nhiêu item được xử lý
     for batch_x, keys in tqdm(loader):
         batch_x = batch_x.to(device)
         with torch.no_grad():
