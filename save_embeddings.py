@@ -9,7 +9,9 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from aasist.data_utils import Dataset_ASVspoof2019_devNeval
+# from aasist.data_utils import Dataset_ASVspoof2019_devNeval
+from custom_dataloader import VlspDataset 
+
 from aasist.models.AASIST import Model as AASISTModel
 from ECAPATDNN.model import ECAPA_TDNN
 from utils import load_parameters
@@ -17,54 +19,57 @@ from utils import load_parameters
 # list of dataset partitions
 SET_PARTITION = ["trn", "dev", "eval"]
 
+KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/"
+
 # list of countermeasure(CM) protocols
 SET_CM_PROTOCOL = {
-    "trn": "protocols/ASVspoof2019.LA.cm.train.trn.txt",
-    "dev": "protocols/ASVspoof2019.LA.cm.dev.trl.txt",
-    "eval": "protocols/ASVspoof2019.LA.cm.eval.trl.txt",
+    "trn": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),
+    "dev": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),  # Tạm thời dùng train
+    "eval": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt") # Tạm thời dùng train
 }
-
 # directories of each dataset partition
 SET_DIR = {
-    "trn": "./LA/ASVspoof2019_LA_train/",
-    "dev": "./LA/ASVspoof2019_LA_dev/",
-    "eval": "./LA/ASVspoof2019_LA_eval/",
+    "trn": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"),
+    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"), # Tạm thời dùng train
+    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/")# Tạm thời dùng train
 }
 
 # enrolment data list for speaker model calculation
 # each speaker model comprises multiple enrolment utterances
+# Placeholder cho các tệp protocol, cập nhật khi có
 SET_TRN = {
-    "dev": [
-        "./LA/ASVspoof2019_LA_asv_protocols/ASVspoof2019.LA.asv.dev.female.trn.txt",
-        "./LA/ASVspoof2019_LA_asv_protocols/ASVspoof2019.LA.asv.dev.male.trn.txt",
-    ],
-    "eval": [
-        "./LA/ASVspoof2019_LA_asv_protocols/ASVspoof2019.LA.asv.eval.female.trn.txt",
-        "./LA/ASVspoof2019_LA_asv_protocols/ASVspoof2019.LA.asv.eval.male.trn.txt",
-    ],
+    "dev": [],
+    "eval": [],
 }
-
 
 def save_embeddings(
     set_name, cm_embd_ext, asv_embd_ext, device
 ):
-    meta_lines = open(SET_CM_PROTOCOL[set_name], "r").readlines()
-    utt2spk = {}
-    utt_list = []
-    for line in meta_lines:
-        tmp = line.strip().split(" ")
-
-        spk = tmp[0]
-        utt = tmp[1]
-
-        if utt in utt2spk:
-            print("Duplicated utt error", utt)
-
-        utt2spk[utt] = spk
-        utt_list.append(utt)
-
+    protocol_path = SET_CM_PROTOCOL[set_name]
     base_dir = SET_DIR[set_name]
-    dataset = Dataset_ASVspoof2019_devNeval(utt_list, Path(base_dir))
+
+    if not os.path.exists(protocol_path):
+        print(f"Metadata file for '{set_name}' not found at {protocol_path}. Skipping.")
+        return
+
+    meta_lines = open(protocol_path, "r").readlines()
+    utt_list = []  # Sẽ chứa các đường dẫn tương đối
+
+    for line in meta_lines:
+        parts = line.strip().split(" ")
+        if len(parts) != 3:
+            continue
+        
+        filepath = parts[1] # vd: vlsp2025/train/id00271/bonafide/00000.wav
+        
+        # Trích xuất đường dẫn tương đối (bỏ phần 'vlsp2025/train/')
+        try:
+            relative_path = filepath.split(f"vlsp2025/{set_name}/", 1)[1]
+            utt_list.append(relative_path)
+        except IndexError:
+            continue
+            
+    dataset = VlspDataset(utt_list, Path(base_dir))
     loader = DataLoader(
         dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
     )
@@ -72,27 +77,32 @@ def save_embeddings(
     cm_emb_dic = {}
     asv_emb_dic = {}
 
-    print("Getting embeddings from set %s..." % (set_name))
+    print(f"Getting embeddings from set {set_name}...")
 
-    for batch_x, key in tqdm(loader):
+    for batch_x, keys in tqdm(loader):
         batch_x = batch_x.to(device)
         with torch.no_grad():
             batch_cm_emb, _ = cm_embd_ext(batch_x)
             batch_cm_emb = batch_cm_emb.detach().cpu().numpy()
             batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
 
-        for k, cm_emb, asv_emb in zip(key, batch_cm_emb, batch_asv_emb):
-            cm_emb_dic[k] = cm_emb
-            asv_emb_dic[k] = asv_emb
+        for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
+            # Key bây giờ là tên file, ví dụ '00000.wav'
+            cm_emb_dic[key] = cm_emb
+            asv_emb_dic[key] = asv_emb
 
     os.makedirs("embeddings", exist_ok=True)
-    with open( "embeddings/cm_embd_%s.pk" % (set_name), "wb") as f:
+    with open(f"embeddings/cm_embd_{set_name}.pk", "wb") as f:
         pk.dump(cm_emb_dic, f)
-    with open("embeddings/asv_embd_%s.pk" % (set_name), "wb") as f:
+    with open(f"embeddings/asv_embd_{set_name}.pk", "wb") as f:
         pk.dump(asv_emb_dic, f)
 
 
 def save_models(set_name, asv_embd_ext, device):
+    if not SET_TRN.get(set_name):
+        print(f"No enrollment protocols for '{set_name}'. Skipping speaker model generation.")
+        return
+    
     utt2spk = {}
     utt_list = []
 
@@ -113,7 +123,7 @@ def save_models(set_name, asv_embd_ext, device):
                 utt_list.append(utt)
 
     base_dir = SET_DIR[set_name]
-    dataset = Dataset_ASVspoof2019_devNeval(utt_list, Path(base_dir))
+    dataset = VlspDataset(utt_list, Path(base_dir))
     loader = DataLoader(
         dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
     )
@@ -177,16 +187,24 @@ def main():
     asv_embd_ext.to(device)
     asv_embd_ext.eval()
 
-    for set_name in SET_PARTITION:
-        save_embeddings(
-            set_name,
-            cm_embd_ext,
-            asv_embd_ext,
-            device,
-        )
-        if set_name == "trn":
-            continue
-        save_models(set_name, asv_embd_ext, device)
+    # for set_name in SET_PARTITION:
+    #     save_embeddings(
+    #         set_name,
+    #         cm_embd_ext,
+    #         asv_embd_ext,
+    #         device,
+    #     )
+    #     if set_name == "trn":
+    #         continue
+        # save_models(set_name, asv_embd_ext, device)
+    # temp
+    set_to_run = "trn"
+    save_embeddings(
+        set_to_run,
+        cm_embd_ext,
+        asv_embd_ext,
+        device,
+    )
 
 
 if __name__ == "__main__":

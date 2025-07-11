@@ -117,32 +117,29 @@ def find_gpus(nums=4, min_req_mem=None) -> str:
 
 
 def get_spkdic(cm_meta: str) -> Dict:
+    if not cm_meta or not os.path.exists(cm_meta):
+        return {}
+        
     l_cm_meta = open(cm_meta, "r").readlines()
-
     d_spk = {}
-    # dictionary of speakers
-    # d_spk : {
-    #   'spk_id1':{
-    #       'bonafide': [utt1, utt2],
-    #       'spoof': [utt5]
-    #   },
-    #   'spk_id2':{
-    #       'bonafide': [utt3, utt4, utt8],
-    #       'spoof': [utt6, utt7]
-    #   } ...
-    # }
 
     for line in l_cm_meta:
-        spk, filename, _, _, ans = line.strip().split(" ")
+        parts = line.strip().split(" ")
+        if len(parts) != 3:
+            continue
+            
+        spk, filepath, ans = parts
+        
+        # Lấy tên file làm key để khớp với key trong file embedding
+        filename_key = os.path.basename(filepath)
+
         if spk not in d_spk:
-            d_spk[spk] = {}
-            d_spk[spk]["bonafide"] = []
-            d_spk[spk]["spoof"] = []
+            d_spk[spk] = {"bonafide": [], "spoof": []}
 
         if ans == "bonafide":
-            d_spk[spk]["bonafide"].append(filename)
+            d_spk[spk]["bonafide"].append(filename_key)
         elif ans == "spoof":
-            d_spk[spk]["spoof"].append(filename)
+            d_spk[spk]["spoof"].append(filename_key)
 
     return d_spk
 
