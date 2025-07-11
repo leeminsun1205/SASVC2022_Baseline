@@ -31,7 +31,7 @@ class VlspDataset(Dataset):
 
         full_audio_path = self.base_dir / relative_path
         
-        key_filename = os.path.basename(relative_path)
+        key_filename = relative_path
 
         X, _ = sf.read(str(full_audio_path))
         

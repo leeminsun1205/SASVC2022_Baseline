@@ -79,10 +79,10 @@ def load_parameters(trg_state, path):
             name = name.replace("module.", "")
             name = name.replace("speaker_encoder.", "")
             
-            if name not in trg_state:
-                if name == "speaker_loss.weight": continue
-                print("%s is not in the model."%origname)
-                continue
+            if name == "speaker_loss.weight": continue
+            # if name not in trg_state:   
+            #     print("%s is not in the model."%origname)
+            #     continue
         if trg_state[name].size() != loaded_state[origname].size():
             print("Wrong parameter length: %s, model: %s, loaded: %s"%(origname, trg_state[name].size(), loaded_state[origname].size()))
             continue

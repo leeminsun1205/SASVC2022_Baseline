@@ -34,9 +34,19 @@ def main(args):
     model_save_path.mkdir(parents=True, exist_ok=True)
     copy(args.config, model_tag / "config.conf")
 
-    _system = import_module("systems.{}".format(config.pl_system))
-    _system = getattr(_system, "System")
-    system = _system(config)
+    # _system = import_module("systems.{}".format(config.pl_system))
+    # _system = getattr(_system, "System")
+    # system = _system(config)
+    if config.get("mode") == "finetune":
+        print("Running in Fine-tuning mode")
+        _system_module = import_module("systems.finetune_system")
+        System = getattr(_system_module, "FinetuneSystem")
+    else:
+        print("Running in Feature Extraction mode")
+        _system_module = import_module("systems.{}".format(config.pl_system))
+        System = getattr(_system_module, "System")
+    
+    system = System(config)
 
     # Configure logging and callbacks
     logger = [
