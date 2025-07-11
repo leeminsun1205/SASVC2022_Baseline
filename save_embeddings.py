@@ -19,7 +19,7 @@ from utils import load_parameters
 # list of dataset partitions
 SET_PARTITION = ["train", "dev", "eval"]
 
-KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/vlsp2025"
+KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/"
 
 # list of countermeasure(CM) protocols
 SET_CM_PROTOCOL = {
@@ -29,9 +29,9 @@ SET_CM_PROTOCOL = {
 }
 # directories of each dataset partition
 SET_DIR = {
-    "train": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"),
-    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"), # Tạm thời dùng train
-    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/")# Tạm thời dùng train
+    "train": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/"),
+    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/"), # Tạm thời dùng train
+    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/")# Tạm thời dùng train
 }
 
 # enrolment data list for speaker model calculation
@@ -64,7 +64,7 @@ def save_embeddings(
         
         # Trích xuất đường dẫn tương đối (bỏ phần 'vlsp2025/train/')
         try:
-            relative_path = filepath.split(f"vlsp2025/{set_name}/", 1)[1]
+            relative_path = filepath.split(f"vlsp2025/vlsp2025/{set_name}/", 1)[1]
             utt_list.append(relative_path)
         except IndexError:
             continue
