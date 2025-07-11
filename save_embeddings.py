@@ -77,24 +77,20 @@ def save_embeddings(
 
     print(f"\nStart to extract embedding for '{set_name}' ({len(dataset)} files)...")
 
-    processed_files = 0
-    milestone = 10000
+    with tqdm(total=len(dataset), desc=f"Processing {set_name}", unit="file") as pbar:
+        for batch_x, keys in loader:
+            batch_x = batch_x.to(device)
+            with torch.no_grad():
+                batch_cm_emb, _ = cm_embd_ext(batch_x)
+                batch_cm_emb = batch_cm_emb.detach().cpu().numpy()
+                batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
 
-    for batch_x, keys in tqdm(loader, desc=f"Processing {set_name}", unit="file", total=len(dataset)):
-        batch_x = batch_x.to(device)
-        with torch.no_grad():
-            batch_cm_emb, _ = cm_embd_ext(batch_x)
-            batch_cm_emb = batch_cm_emb.detach().cpu().numpy()
-            batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
-
-        for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
-            cm_emb_dic[key] = cm_emb
-            asv_emb_dic[key] = asv_emb
-        
-        processed_files += len(keys)
-        if processed_files >= milestone:
-            print(f"\n[Process] Đã xử lý xong khoảng {milestone} tệp...")
-            milestone += 10000
+            for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
+                cm_emb_dic[key] = cm_emb
+                asv_emb_dic[key] = asv_emb
+            
+            # Cập nhật thanh tiến trình với số file trong batch vừa xử lý
+            pbar.update(len(keys))
     
     output_dir = "embeddings"
     os.makedirs(output_dir, exist_ok=True)
