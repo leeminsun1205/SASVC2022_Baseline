@@ -109,7 +109,7 @@ def find_gpus(nums=4, min_req_mem=None) -> str:
     if min_req_mem is not None and \
         int(idx_freememory_pair[nums][1]) < min_req_mem:
 
-        return -1
+        return '-1'
 
     using_gpus =  ','.join(using_gpus)
     print('using GPU idx: #', using_gpus)
@@ -130,7 +130,6 @@ def get_spkdic(cm_meta: str) -> Dict:
             
         spk, filepath, ans = parts
         
-        # Lấy tên file làm key để khớp với key trong file embedding
         filename_key = os.path.basename(filepath)
 
         if spk not in d_spk:

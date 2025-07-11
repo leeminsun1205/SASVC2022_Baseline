@@ -9,7 +9,6 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-# from aasist.data_utils import Dataset_ASVspoof2019_devNeval
 from custom_dataloader import VlspDataset 
 
 from aasist.models.AASIST import Model as AASISTModel
@@ -24,22 +23,19 @@ KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/"
 # list of countermeasure(CM) protocols
 SET_CM_PROTOCOL = {
     "train": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),
-    "dev": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),  # Tạm thời dùng train
-    "eval": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt") # Tạm thời dùng train
+    "dev": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"), # temp 
+    "eval": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt") # temp 
 }
 # directories of each dataset partition
 SET_DIR = {
     "train": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/"),
-    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/"), # Tạm thời dùng train
-    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/")# Tạm thời dùng train
+    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/"), # temp 
+    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/vlsp2025/train/") # temp 
 }
 
-# enrolment data list for speaker model calculation
-# each speaker model comprises multiple enrolment utterances
-# Placeholder cho các tệp protocol, cập nhật khi có
 SET_TRN = {
-    "dev": [],
-    "eval": [],
+    "dev": [], # temp 
+    "eval": [], # temp 
 }
 
 def save_embeddings(
@@ -62,19 +58,13 @@ def save_embeddings(
         
         filepath = parts[1]
         
-        # --- PHẦN SỬA LỖI ---
-        # Bỏ đi tiền tố `vlsp2025/` và `train/` để có đường dẫn tương đối đúng
         prefix_to_remove = f"vlsp2025/{set_name}/"
         if filepath.startswith(prefix_to_remove):
             relative_path = filepath[len(prefix_to_remove):]
             utt_list.append(relative_path)
-        else:
-            # Tùy chọn: in cảnh báo nếu định dạng không khớp
-            # print(f"Warning: Path format mismatch for '{filepath}'")
-            pass
 
     if not utt_list:
-        print("\nError: The utterance list is empty after processing metadata.")
+        print("\n[Error] List of files is empty after processing metadata. Please check the format file!")
         return
 
     dataset = VlspDataset(utt_list, Path(base_dir))
@@ -85,9 +75,12 @@ def save_embeddings(
     cm_emb_dic = {}
     asv_emb_dic = {}
 
-    print(f"\nGetting embeddings from set {set_name} ({len(loader.dataset)} files)...")
+    print(f"\nStart to extract embedding for '{set_name}' ({len(dataset)} files)...")
 
-    for batch_x, keys in tqdm(loader, desc=f"Processing {set_name}"):
+    processed_files = 0
+    milestone = 10000
+
+    for batch_x, keys in tqdm(loader, desc=f"Processing {set_name}", unit="file", total=len(dataset)):
         batch_x = batch_x.to(device)
         with torch.no_grad():
             batch_cm_emb, _ = cm_embd_ext(batch_x)
@@ -97,8 +90,12 @@ def save_embeddings(
         for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
             cm_emb_dic[key] = cm_emb
             asv_emb_dic[key] = asv_emb
+        
+        processed_files += len(keys)
+        if processed_files >= milestone:
+            print(f"\n[Process] Đã xử lý xong khoảng {milestone} tệp...")
+            milestone += 10000
     
-    # Sửa lại đường dẫn lưu file để nhất quán
     output_dir = "embeddings"
     os.makedirs(output_dir, exist_ok=True)
     cm_output_path = os.path.join(output_dir, f"cm_embd_{set_name}.pk")
@@ -109,9 +106,8 @@ def save_embeddings(
     with open(asv_output_path, "wb") as f:
         pk.dump(asv_emb_dic, f)
         
-    print(f"\nDone! Embeddings saved to:")
-    print(f"- {cm_output_path} ({os.path.getsize(cm_output_path)} bytes)")
-    print(f"- {asv_output_path} ({os.path.getsize(asv_output_path)} bytes)")
+    print(f"\nEmbeddings were saved!")
+
 
 def save_models(set_name, asv_embd_ext, device):
     if not SET_TRN.get(set_name):
@@ -212,7 +208,8 @@ def main():
     #     if set_name == "train":
     #         continue
         # save_models(set_name, asv_embd_ext, device)
-    # temp
+        
+    # === temp ===
     set_to_run = "train"
     save_embeddings(
         set_to_run,
@@ -220,6 +217,7 @@ def main():
         asv_embd_ext,
         device,
     )
+    # === temp ===
 
 
 if __name__ == "__main__":
