@@ -48,60 +48,46 @@ def save_embeddings(
     protocol_path = SET_CM_PROTOCOL[set_name]
     base_dir = SET_DIR[set_name]
 
-    print(f"\n[DEBUG] Bắt đầu xử lý cho set: '{set_name}'")
-    print(f"[DEBUG] Đường dẫn file metadata: {protocol_path}")
-    print(f"[DEBUG] Thư mục gốc của dữ liệu: {base_dir}")
-
     if not os.path.exists(protocol_path):
-        print(f"[DEBUG] LỖI: Không tìm thấy file metadata tại '{protocol_path}'. Dừng lại.")
+        print(f"Metadata file for '{set_name}' not found at {protocol_path}. Skipping.")
         return
 
     meta_lines = open(protocol_path, "r").readlines()
-    print(f"[DEBUG] Đã đọc được {len(meta_lines)} dòng từ file metadata.")
+    utt_list = []
 
-    utt_list = []  # Sẽ chứa các đường dẫn tương đối
-
-    for i, line in enumerate(meta_lines):
-        if i < 5: # In ra 5 dòng đầu tiên để kiểm tra
-            print(f"[DEBUG] Dòng {i+1}: {line.strip()}")
-
+    for line in meta_lines:
         parts = line.strip().split(" ")
         if len(parts) != 3:
             continue
         
-        filepath = parts[1] # vd: vlsp2025/train/id00271/bonafide/00000.wav
+        filepath = parts[1]
         
-        try:
-            # Đây là dòng code quan trọng cần kiểm tra
-            relative_path = filepath.split(f"vlsp2025/vlsp2025/{set_name}/", 1)[1]
+        # --- PHẦN SỬA LỖI ---
+        # Bỏ đi tiền tố `vlsp2025/` và `train/` để có đường dẫn tương đối đúng
+        prefix_to_remove = f"vlsp2025/{set_name}/"
+        if filepath.startswith(prefix_to_remove):
+            relative_path = filepath[len(prefix_to_remove):]
             utt_list.append(relative_path)
-        except IndexError:
-            # Nếu có lỗi ở đây, nó sẽ được in ra
-            if i < 10: # Chỉ in 10 lỗi đầu tiên để tránh spam
-                print(f"[DEBUG] LỖI PARSING tại dòng {i+1}: Không thể trích xuất đường dẫn tương đối từ '{filepath}'")
-            continue
+        else:
+            # Tùy chọn: in cảnh báo nếu định dạng không khớp
+            # print(f"Warning: Path format mismatch for '{filepath}'")
+            pass
 
-    print(f"\n[DEBUG] Đã xử lý xong metadata. Tổng số file được thêm vào utt_list: {len(utt_list)}")
     if not utt_list:
-        print("[DEBUG] KẾT LUẬN: utt_list rỗng! Đây là nguyên nhân gây ra lỗi '0it'. Vui lòng kiểm tra lại logic split đường dẫn bên trên.")
+        print("\nError: The utterance list is empty after processing metadata.")
         return
 
     dataset = VlspDataset(utt_list, Path(base_dir))
-    print(f"[DEBUG] Đã tạo VlspDataset với {len(dataset)} mẫu.")
-
     loader = DataLoader(
         dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
     )
-    print(f"[DEBUG] Đã tạo DataLoader với số batch là {len(loader)}.")
-
 
     cm_emb_dic = {}
     asv_emb_dic = {}
 
-    print(f"\nGetting embeddings from set {set_name}...")
+    print(f"\nGetting embeddings from set {set_name} ({len(loader.dataset)} files)...")
 
-    # Vòng lặp tqdm sẽ cho bạn biết chính xác có bao nhiêu item được xử lý
-    for batch_x, keys in tqdm(loader):
+    for batch_x, keys in tqdm(loader, desc=f"Processing {set_name}"):
         batch_x = batch_x.to(device)
         with torch.no_grad():
             batch_cm_emb, _ = cm_embd_ext(batch_x)
@@ -109,16 +95,23 @@ def save_embeddings(
             batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
 
         for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
-            # Key bây giờ là tên file, ví dụ '00000.wav'
             cm_emb_dic[key] = cm_emb
             asv_emb_dic[key] = asv_emb
     
-    os.makedirs("new_embeddings", exist_ok=True)
-    with open(f"new_embeddings/cm_embd_{set_name}.pk", "wb") as f:
+    # Sửa lại đường dẫn lưu file để nhất quán
+    output_dir = "embeddings"
+    os.makedirs(output_dir, exist_ok=True)
+    cm_output_path = os.path.join(output_dir, f"cm_embd_{set_name}.pk")
+    asv_output_path = os.path.join(output_dir, f"asv_embd_{set_name}.pk")
+
+    with open(cm_output_path, "wb") as f:
         pk.dump(cm_emb_dic, f)
-    with open(f"new_embeddings/asv_embd_{set_name}.pk", "wb") as f:
+    with open(asv_output_path, "wb") as f:
         pk.dump(asv_emb_dic, f)
-    print('Done!')
+        
+    print(f"\nDone! Embeddings saved to:")
+    print(f"- {cm_output_path} ({os.path.getsize(cm_output_path)} bytes)")
+    print(f"- {asv_output_path} ({os.path.getsize(asv_output_path)} bytes)")
 
 def save_models(set_name, asv_embd_ext, device):
     if not SET_TRN.get(set_name):
