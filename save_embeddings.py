@@ -9,75 +9,62 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-# from aasist.data_utils import Dataset_ASVspoof2019_devNeval
 from custom_dataloader import VlspDataset 
 
 from aasist.models.AASIST import Model as AASISTModel
 from ECAPATDNN.model import ECAPA_TDNN
 from utils import load_parameters
 
-# list of dataset partitions
-SET_PARTITION = ["trn", "dev", "eval"]
-
+# --- CẤU HÌNH ---
 KAGGLE_BASE_PATH = "/kaggle/input/vlsp-vsasv-datasets/"
+SET_NAME_TO_RUN = "trn"
 
-# list of countermeasure(CM) protocols
-SET_CM_PROTOCOL = {
-    "trn": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),
-    "dev": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt"),  # Tạm thời dùng train
-    "eval": os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt") # Tạm thời dùng train
-}
-# directories of each dataset partition
-SET_DIR = {
-    "trn": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"),
-    "dev": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/"), # Tạm thời dùng train
-    "eval": os.path.join(KAGGLE_BASE_PATH, "vlsp2025/train/")# Tạm thời dùng train
-}
+PROTOCOL_PATH = os.path.join(KAGGLE_BASE_PATH, "train_vlsp_2025_metadata.txt")
+DATA_DIR = os.path.join(KAGGLE_BASE_PATH, f"vlsp2025/{SET_NAME_TO_RUN}/")
+# --- KẾT THÚC CẤU HÌNH ---
 
-# enrolment data list for speaker model calculation
-# each speaker model comprises multiple enrolment utterances
-# Placeholder cho các tệp protocol, cập nhật khi có
-SET_TRN = {
-    "dev": [],
-    "eval": [],
-}
 
-def save_embeddings(
-    set_name, cm_embd_ext, asv_embd_ext, device
-):
-    protocol_path = SET_CM_PROTOCOL[set_name]
-    base_dir = SET_DIR[set_name]
-
-    if not os.path.exists(protocol_path):
-        print(f"Metadata file for '{set_name}' not found at {protocol_path}. Skipping.")
+def save_embeddings(set_name, cm_embd_ext, asv_embd_ext, device):
+    if not os.path.exists(PROTOCOL_PATH):
+        print(f"LỖI: File metadata không tồn tại tại: {PROTOCOL_PATH}")
         return
 
-    meta_lines = open(protocol_path, "r").readlines()
-    utt_list = []  # Sẽ chứa các đường dẫn tương đối
-
-    for line in meta_lines:
+    meta_lines = open(PROTOCOL_PATH, "r").readlines()
+    utt_list = []
+    
+    print(f"Đã đọc {len(meta_lines)} dòng từ file metadata.")
+    print("Bắt đầu xử lý từng dòng...")
+    
+    for i, line in enumerate(meta_lines):
         parts = line.strip().split(" ")
         if len(parts) != 3:
+            print(f"  - Dòng {i+1}: Bỏ qua do không có 3 phần tử.")
             continue
         
-        filepath = parts[1] # vd: vlsp2025/train/id00271/bonafide/00000.wav
+        filepath = parts[1]
+        split_pattern = f"vlsp2025/{set_name}/"
         
-        # Trích xuất đường dẫn tương đối (bỏ phần 'vlsp2025/train/')
-        try:
-            relative_path = filepath.split(f"vlsp2025/{set_name}/", 1)[1]
+        if split_pattern in filepath:
+            relative_path = filepath.split(split_pattern, 1)[1]
             utt_list.append(relative_path)
-        except IndexError:
-            continue
-            
-    dataset = VlspDataset(utt_list, Path(base_dir))
-    loader = DataLoader(
-        dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
-    )
+        else:
+            # In ra thông báo lỗi để biết tại sao không tách được
+            print(f"  - Dòng {i+1}: Tách thất bại! Không tìm thấy '{split_pattern}' trong '{filepath}'")
+
+    print(f"Xử lý hoàn tất. Tổng số tệp hợp lệ trong danh sách: {len(utt_list)}")
+    
+    # Kiểm tra nếu danh sách rỗng thì dừng lại
+    if not utt_list:
+        print("LỖI: Danh sách tệp cần xử lý bị rỗng. Dừng chương trình.")
+        return
+        
+    dataset = VlspDataset(utt_list, Path(DATA_DIR))
+    loader = DataLoader(dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True)
 
     cm_emb_dic = {}
     asv_emb_dic = {}
 
-    print(f"Getting embeddings from set {set_name}...")
+    print(f"Bắt đầu trích xuất embedding từ tập {set_name}...")
 
     for batch_x, keys in tqdm(loader):
         batch_x = batch_x.to(device)
@@ -87,7 +74,6 @@ def save_embeddings(
             batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
 
         for key, cm_emb, asv_emb in zip(keys, batch_cm_emb, batch_asv_emb):
-            # Key bây giờ là tên file, ví dụ '00000.wav'
             cm_emb_dic[key] = cm_emb
             asv_emb_dic[key] = asv_emb
 
@@ -96,74 +82,14 @@ def save_embeddings(
         pk.dump(cm_emb_dic, f)
     with open(f"embeddings/asv_embd_{set_name}.pk", "wb") as f:
         pk.dump(asv_emb_dic, f)
-
-
-def save_models(set_name, asv_embd_ext, device):
-    if not SET_TRN.get(set_name):
-        print(f"No enrollment protocols for '{set_name}'. Skipping speaker model generation.")
-        return
-    
-    utt2spk = {}
-    utt_list = []
-
-    for trn in SET_TRN[set_name]:
-        meta_lines = open(trn, "r").readlines()
-
-        for line in meta_lines:
-            tmp = line.strip().split(" ")
-
-            spk = tmp[0]
-            utts = tmp[1].split(",")
-
-            for utt in utts:
-                if utt in utt2spk:
-                    print("Duplicated utt error", utt)
-
-                utt2spk[utt] = spk
-                utt_list.append(utt)
-
-    base_dir = SET_DIR[set_name]
-    dataset = VlspDataset(utt_list, Path(base_dir))
-    loader = DataLoader(
-        dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True
-    )
-    asv_emb_dic = {}
-
-    print("Getting embedgins from set %s..." % (set_name))
-
-    for batch_x, key in tqdm(loader):
-        batch_x = batch_x.to(device)
-        with torch.no_grad():
-            batch_asv_emb = asv_embd_ext(batch_x, aug=False).detach().cpu().numpy()
-
-        for k, asv_emb in zip(key, batch_asv_emb):
-            utt = k
-            spk = utt2spk[utt]
-
-            if spk not in asv_emb_dic:
-                asv_emb_dic[spk] = []
-
-            asv_emb_dic[spk].append(asv_emb)
-
-    for spk in asv_emb_dic:
-        asv_emb_dic[spk] = np.mean(asv_emb_dic[spk], axis=0)
-
-    with open("embeddings/spk_model.pk_%s" % (set_name), "wb") as f:
-        pk.dump(asv_emb_dic, f)
+    print("Trích xuất embedding thành công!")
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-aasist_config", type=str, default="./aasist/config/AASIST.conf"
-    )
-    parser.add_argument(
-        "-aasist_weight", type=str, default="./aasist/models/weights/AASIST.pth"
-    )
-    parser.add_argument(
-        "-ecapa_weight", type=str, default="./ECAPATDNN/exps/pretrain.model"
-    )
-
+    parser.add_argument("-aasist_config", type=str, default="./aasist/config/AASIST.conf")
+    parser.add_argument("-aasist_weight", type=str, default="./aasist/models/weights/AASIST.pth")
+    parser.add_argument("-ecapa_weight", type=str, default="./ECAPATDNN/exps/pretrain.model")
     return parser.parse_args()
 
 
@@ -177,7 +103,7 @@ def main():
         config = json.loads(f_json.read())
 
     model_config = config["model_config"]
-    cm_embd_ext = AASISTModel(model_config).to(device)
+    cm_embd_ext = AASISTModel(model_config)
     load_parameters(cm_embd_ext.state_dict(), args.aasist_weight)
     cm_embd_ext.to(device)
     cm_embd_ext.eval()
@@ -187,24 +113,7 @@ def main():
     asv_embd_ext.to(device)
     asv_embd_ext.eval()
 
-    # for set_name in SET_PARTITION:
-    #     save_embeddings(
-    #         set_name,
-    #         cm_embd_ext,
-    #         asv_embd_ext,
-    #         device,
-    #     )
-    #     if set_name == "trn":
-    #         continue
-        # save_models(set_name, asv_embd_ext, device)
-    # temp
-    set_to_run = "trn"
-    save_embeddings(
-        set_to_run,
-        cm_embd_ext,
-        asv_embd_ext,
-        device,
-    )
+    save_embeddings(SET_NAME_TO_RUN, cm_embd_ext, asv_embd_ext, device)
 
 
 if __name__ == "__main__":
